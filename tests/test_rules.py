@@ -37,15 +37,26 @@ def test_strip_long_dashes_does_not_touch_accents():
     assert strip_long_dashes(text) == text
 
 
+def test_strip_long_dashes_collapses_double_short_dash():
+    # Il trattino doppio ASCII "--" e' il surrogato manuale dell'em dash
+    # (spesso digitato di getto): va ridotto a un trattino corto singolo,
+    # non lasciato come doppione (vedi CONVENTIONS.md, 30.08.2026).
+    assert strip_long_dashes("a -- b") == "a - b"
+    assert strip_long_dashes("a --- b") == "a - b"
+    assert strip_long_dashes("a - b") == "a - b"
+
+
 def test_build_message_strips_dashes_everywhere():
     result = build_message(
-        subject="Test — con trattino",
+        subject="Test — con trattino -- doppio",
         body="Corpo — con trattino – e un altro ―.",
-        html_body="<p>Corpo — con trattino.</p>",
+        html_body="<p>Corpo — con trattino -- doppio.</p>",
     )
     assert "—" not in result["subject"]
     assert "–" not in result["subject"]
+    assert "--" not in result["subject"]
     assert "—" not in result["html_body"]
+    assert "--" not in result["html_body"]
     assert "-" in result["subject"]
 
 
