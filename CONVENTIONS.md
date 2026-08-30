@@ -53,6 +53,48 @@ unico tag. Lo stile (famiglia di carattere, dimensione, colore) e'
 imposto dal pacchetto via `DEFAULT_STYLE` (sostituibile per progetto o
 per casella): chi scrive il messaggio non deve indicarlo.
 
+## Grassetto riservato ai titoli o a poche parole determinanti, mai alla prosa
+
+Regola esplicita di Alberto (30.08.2026, gia' presente in due documenti
+di progetto separati per le email formation@ e per i documenti Word,
+promossa qui a regola di codice trasversale): il grassetto (`<strong>` o
+`<b>`) resta legittimo per mettere in evidenza una data, un nome proprio
+o qualche parola chiave determinante, ma non deve mai coprire un'intera
+frase o un intero paragrafo di prosa corrente. Un messaggio con "gras
+generalizzato" nel corpo si legge come un annuncio urlato invece che come
+una comunicazione curata.
+
+`limit_bold` applica questa regola in modo puramente strutturale, senza
+capire il contenuto: conta le parole dentro ogni `<strong>`/`<b>` del
+frammento, e se superano `MAX_BOLD_WORDS` (6 di default, valore
+volutamente generoso perche' una data lunga o un intitule breve ci
+stiano comunque dentro), il tag viene tolto (`unwrap`) e il testo resta
+al suo posto, senza piu' enfasi. `build_message` la applica su
+`html_body`, dopo `strip_long_dashes` e prima di `strip_manual_closing`,
+con soglia personalizzabile via il parametro `max_bold_words`.
+
+Un'eccezione strutturale, non testuale: un `<strong>`/`<b>` che si trova
+dentro un titolo (`<h1>`-`<h6>`) non viene mai toccato, quale che sia la
+sua lunghezza. Un titolo di documento puo' legittimamente essere
+interamente in evidenza; la regola riguarda solo il grassetto sparso
+nella prosa corrente del corpo del messaggio.
+
+Limiti noti di questa euristica:
+
+- E' un conteggio di parole, non una comprensione semantica: un
+  `<strong>` di sette parole che serve davvero a evidenziare un punto
+  chiave verra' comunque despezzato. Il limite di 6 parole e' una
+  soglia pragmatica scelta per coprire i casi reali osservati (una data
+  completa, un nome e cognome, un intitule breve), non una regola
+  linguistica esatta.
+- Si applica solo dentro `html_body`: il corpo testuale semplice (`body`)
+  non ha comunque nozione di grassetto, quindi non e' interessato.
+- Non distingue un `<strong>` messo per enfasi legittima da uno messo per
+  abitudine: se un giorno serve una distinzione piu' fine (per esempio
+  autorizzare un secondo `<strong>` piu' lungo ma raro nello stesso
+  messaggio), va discussa come evoluzione esplicita della regola, non
+  aggirata caso per caso.
+
 ## Nessuna firma o formula di chiusura scritta a mano
 
 Quando viene passata una firma (`signature_text`/`signature_html`), chi
