@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+venv/
+.env
+
+# File di configurazione personale di ogni progetto che clona template/,
+# mai da versionare qui: contiene firme e indirizzi reali.
+config.py
+tokens.json
