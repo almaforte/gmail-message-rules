@@ -11,9 +11,10 @@ applicate ovunque, non riscritte in ogni repository.
 Le regole imposte, in ordine di applicazione da build_message():
 
 1. html_body e' obbligatorio: niente messaggi in solo testo semplice.
-2. Niente trattini lunghi (em dash, en dash, trattino orizzontale) in
+2. Niente trattini lunghi (em dash, en dash, trattino orizzontale) ne'
+   trattini corti doppi o multipli scritti a mano ("--", "---") in
    oggetto, corpo o html_body: sostituiti in automatico con un trattino
-   corto "-".
+   corto singolo "-".
 3. Grassetto riservato ai titoli o a poche parole determinanti, mai alla
    prosa corrente: un <strong>/<b> di piu' di qualche parola nel corpo
    del messaggio viene despezzato (il testo resta, il grassetto no). I
@@ -65,4 +66,4 @@ __all__ = [
     "MAX_BOLD_WORDS",
 ]
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
