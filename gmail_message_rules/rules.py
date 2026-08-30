@@ -88,10 +88,63 @@ def _closing_pattern_text(phrases: list) -> re.Pattern:
     )
 
 
-def _closing_pattern_html(phrases: list) -> re.Pattern:
+def _closing_first_line_pattern(phrases: list) -> re.Pattern:
+    """
+    Riconosce una formula di chiusura quando e' la PRIMA riga di testo di
+    un blocco HTML, seguita o no da altre righe nello stesso blocco (il
+    caso reale di una firma manuale: "Cordialement,<br>Alberto",
+    "Bien cordialement,<br><br>Dr Forte<br>Almaval"). A differenza di un
+    pattern che richiede la chiusura come UNICO contenuto del blocco,
+    questo riconosce anche una chiusura seguita da altre righe nello
+    stesso tag, che e' il caso piu' comune in pratica (vedi
+    CONVENTIONS.md, correzione del 30.08.2026).
+    """
     return re.compile(
-        r"(?is)<(p|div)[^>]*>\s*(" + "|".join(re.escape(p) for p in phrases) + r")\s*[,.:]?\s*(<br\s*/?>)?\s*</\1>",
+        r"(?i)^\s*(" + "|".join(re.escape(p) for p in phrases) + r")\s*[,.:]?\s*$"
     )
+
+
+def _strip_manual_closing_html(html_body: str, phrases: list) -> str:
+    """
+    Cerca, tra i tag di blocco di primo livello di html_body, il primo la
+    cui prima riga di testo e' una formula di chiusura nota, purche' quel
+    blocco si trovi nell'ultimo quarto del documento (stessa soglia usata
+    per il testo semplice, per non tagliare per errore una chiusura citata
+    a meta' messaggio per altri motivi). Se lo trova, rimuove quel blocco
+    e tutto cio' che lo segue.
+
+    A differenza della versione precedente (che richiedeva la formula come
+    UNICO contenuto testuale di un <p>/<div> isolato), questa riconosce
+    anche una firma manuale su piu' righe nello stesso blocco, il caso di
+    gran lunga piu' frequente in pratica (vedi CONVENTIONS.md, correzione
+    del 30.08.2026).
+    """
+    if not html_body:
+        return html_body
+    soup = BeautifulSoup(html_body, "html.parser")
+    top_nodes = list(soup.contents)
+    pattern = _closing_first_line_pattern(phrases)
+    serialized = [str(node) for node in top_nodes]
+    total_len = sum(len(s) for s in serialized)
+
+    running = 0
+    cut_from_idx = None
+    for i, node in enumerate(top_nodes):
+        if getattr(node, "name", None):
+            text = node.get_text(separator="\n").strip()
+            first_line = text.split("\n")[0].strip() if text else ""
+            if first_line and pattern.match(first_line) and running >= total_len * 0.75:
+                cut_from_idx = i
+                break
+        running += len(serialized[i])
+
+    if cut_from_idx is None:
+        return html_body
+
+    trimmed = BeautifulSoup("", "html.parser")
+    for node in top_nodes[:cut_from_idx]:
+        trimmed.append(node)
+    return str(trimmed).rstrip()
 
 
 def strip_manual_closing(
@@ -110,6 +163,13 @@ def strip_manual_closing(
     testo, per non tagliare per errore un paragrafo che la cita a meta'
     messaggio per altri motivi. closing_phrases e' sostituibile per chi
     usa formule diverse dalle predefinite (francese/italiano/inglese).
+
+    Lato HTML, la chiusura viene riconosciuta quando e' la prima riga di
+    testo di un blocco di primo livello (non solo quando e' l'unico
+    contenuto del blocco): una firma manuale scritta su piu' righe nello
+    stesso tag, per esempio "<p>Cordialement,<br>Alberto</p>", viene
+    quindi riconosciuta e tolta per intero, insieme a tutto cio' che la
+    segue (vedi CONVENTIONS.md, correzione del 30.08.2026).
     """
     phrases = closing_phrases if closing_phrases is not None else DEFAULT_CLOSING_PHRASES
 
@@ -119,11 +179,7 @@ def strip_manual_closing(
         if match and match.start() >= len(body) * 0.75:
             new_body = body[: match.start()].rstrip()
 
-    new_html_body = html_body
-    if html_body:
-        match = _closing_pattern_html(phrases).search(html_body)
-        if match and match.start() >= len(html_body) * 0.75:
-            new_html_body = html_body[: match.start()].rstrip()
+    new_html_body = _strip_manual_closing_html(html_body, phrases) if html_body else html_body
 
     return new_body, new_html_body
 
