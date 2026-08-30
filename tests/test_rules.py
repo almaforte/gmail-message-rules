@@ -12,6 +12,7 @@ from gmail_message_rules import build_message, HtmlBodyRequiredError
 from gmail_message_rules.rules import (
     strip_long_dashes,
     strip_manual_closing,
+    limit_bold,
     ends_with_block_tag,
     normalize_paragraph_spacing,
 )
@@ -125,3 +126,51 @@ def test_normalize_paragraph_spacing_keeps_br_in_plain_text():
     fragment = "Riga uno<br>Riga due, senza tag di blocco attorno."
     normalized = normalize_paragraph_spacing(fragment)
     assert "<br" in normalized
+
+
+# --- Nuovi test per limit_bold (regola del 30.08.2026) ---
+
+
+def test_limit_bold_keeps_short_bold():
+    frag = "<p>Le <strong>14 septembre 2026</strong> a 9h.</p>"
+    assert limit_bold(frag) == frag
+
+
+def test_limit_bold_keeps_short_bold_with_b_tag():
+    frag = "<p>Bonjour <b>Marie Dupont</b>,</p>"
+    assert limit_bold(frag) == frag
+
+
+def test_limit_bold_strips_long_bold_sentence():
+    frag = "<p><strong>Ceci est une phrase entiere mise en gras sans aucune raison valable ici.</strong></p>"
+    result = limit_bold(frag)
+    assert "<strong>" not in result
+    assert "Ceci est une phrase entiere" in result
+
+
+def test_limit_bold_never_touches_headings():
+    frag = "<h2><strong>Ceci est un titre de chapitre assez long avec plusieurs mots</strong></h2>"
+    result = limit_bold(frag)
+    assert "<strong>" in result
+
+
+def test_limit_bold_empty_and_none():
+    assert limit_bold("") == ""
+    assert limit_bold(None) is None
+
+
+def test_limit_bold_custom_max_words():
+    frag = "<p><strong>Un deux trois quatre</strong></p>"
+    assert "<strong>" in limit_bold(frag, max_words=6)
+    assert "<strong>" not in limit_bold(frag, max_words=2)
+
+
+def test_build_message_applies_limit_bold():
+    html_body = (
+        "<p><strong>Une phrase entiere en gras qui ne devrait jamais etre "
+        "entierement mise en evidence comme ca.</strong></p>"
+        "<p>Et une <strong>date importante</strong> ici.</p>"
+    )
+    result = build_message(subject="Oggetto", body="corpo", html_body=html_body)
+    assert "Une phrase entiere en gras" in result["html_body"]
+    assert "date importante</strong>" in result["html_body"]
