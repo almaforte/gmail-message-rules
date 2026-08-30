@@ -123,6 +123,45 @@ def strip_manual_closing(
 
 
 # ---------------------------------------------------------------------------
+# Grassetto riservato ai titoli o a poche parole determinanti, mai alla prosa
+# ---------------------------------------------------------------------------
+
+# Oltre questo numero di parole, un <strong>/<b> smette di essere "una data,
+# un nome proprio, una parola chiave" e diventa un pezzo di prosa intero
+# messo in grassetto: la regola di Alberto (30.08.2026, memoria di progetto)
+# lo vieta nel corpo corrente di un messaggio. Il limite e' volutamente
+# largo (una data lunga o un intitule breve ci stanno comunque dentro) per
+# non toccare mai un uso legittimo (una data, un nome proprio determinante).
+MAX_BOLD_WORDS = 6
+
+
+def limit_bold(fragment: str, max_words: int = MAX_BOLD_WORDS) -> str:
+    """
+    Rimuove un <strong> o <b> che racchiude piu' di max_words parole: il
+    tag viene tolto, il testo resta al suo posto ma senza piu' grassetto.
+    Un <strong> corto (una data, un nome proprio, un intitule di poche
+    parole) non viene mai toccato. Non tocca mai un <strong>/<b> che si
+    trova dentro un titolo (<h1>-<h6>): un titolo puo' legittimamente
+    essere interamente in evidenza, la regola riguarda solo il grassetto
+    sparso nella prosa corrente del corpo.
+
+    Si applica dopo normalize_paragraph_spacing e prima di apply_style,
+    per non dover rianalizzare uno stile gia' posato.
+    """
+    if not fragment:
+        return fragment
+    soup = BeautifulSoup(fragment, "html.parser")
+    heading_tags = {"h1", "h2", "h3", "h4", "h5", "h6"}
+    for tag in soup.find_all(["strong", "b"]):
+        if tag.find_parent(heading_tags):
+            continue
+        word_count = len(tag.get_text().split())
+        if word_count > max_words:
+            tag.unwrap()
+    return str(soup)
+
+
+# ---------------------------------------------------------------------------
 # Una sola riga vuota ovunque: tra i paragrafi, e tra il corpo e la firma
 # ---------------------------------------------------------------------------
 
@@ -279,6 +318,7 @@ def build_message(
     signature_html: str = "",
     closing_phrases: Optional[list] = None,
     style: Optional[dict] = None,
+    max_bold_words: int = MAX_BOLD_WORDS,
 ) -> dict:
     """
     Applica tutte le regole in ordine e restituisce un dict pronto per
@@ -302,6 +342,8 @@ def build_message(
     subject = strip_long_dashes(subject)
     body = strip_long_dashes(body)
     html_body = strip_long_dashes(html_body)
+
+    html_body = limit_bold(html_body, max_words=max_bold_words)
 
     if signature_text or signature_html:
         body, html_body = strip_manual_closing(body, html_body, closing_phrases=closing_phrases)
