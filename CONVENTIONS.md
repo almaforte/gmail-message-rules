@@ -33,6 +33,20 @@ testo di questo repository (README, questo file, messaggi di commit)
 resta invece una regola di scrittura da rispettare a mano, perche' quel
 testo non passa da `build_message`.
 
+**Aggiornamento del 30.08.2026 (stesso giorno, verifica empirica in
+bozza Gmail):** la regola copriva solo i tre caratteri non ASCII (em
+dash, en dash, trattino orizzontale), ma non il caso, altrettanto
+frequente in scrittura veloce, di due o piu' trattini corti ASCII
+digitati di seguito ("--", "---") come surrogato manuale dell'em dash.
+Una bozza di verifica costruita apposta con `build_message` ha mostrato
+il problema: nel corpo del messaggio "--" restava intatto invece di
+diventare un trattino corto singolo, mentre l'intento della regola
+("mai un trattino lungo, in nessuna forma") copre anche questo caso.
+`strip_long_dashes` ora riconosce anche una sequenza di due o piu'
+trattini corti consecutivi e la riduce a un trattino corto singolo,
+nello stesso passaggio e con lo stesso pattern dei tre caratteri non
+ASCII. Un trattino corto isolato non viene mai toccato.
+
 ## html_body e' obbligatorio
 
 Nessuno strumento costruito con questo pacchetto deve poter inviare o
@@ -94,6 +108,10 @@ Limiti noti di questa euristica:
   autorizzare un secondo `<strong>` piu' lungo ma raro nello stesso
   messaggio), va discussa come evoluzione esplicita della regola, non
   aggirata caso per caso.
+- Non copre altre forme di enfasi generalizzata (corsivo `<em>` su un
+  intero paragrafo, MAIUSCOLO INTEGRALE): resta un candidato di
+  evoluzione esplicita se un giorno si osserva lo stesso problema con
+  un'altra forma di enfasi, non ancora deciso al 30.08.2026.
 
 ## Nessuna firma o formula di chiusura scritta a mano
 
@@ -127,6 +145,17 @@ Limiti noti di questa euristica, da tenere a mente se va estesa:
   possibile costruire un messaggio che la elude. Non e' pensata come
   misura di sicurezza, solo come rete di protezione contro l'errore piu'
   comune osservato in pratica.
+- **Bug noto, non ancora corretto al 30.08.2026:** il pattern HTML
+  (`_closing_pattern_html`) riconosce una chiusura solo se e' l'unico
+  contenuto testuale di un `<p>`/`<div>` isolato. Una chiusura manuale
+  scritta su piu' righe nello stesso blocco (per esempio
+  `<p>Cordialement,<br>Alberto</p>`), o preceduta da altro testo nello
+  stesso paragrafo, non viene riconosciuta e quindi non viene rimossa:
+  il messaggio finale mostra un doppione. Una bozza di verifica costruita
+  il 30.08.2026 ha confermato il problema su entrambe le varianti (una
+  riga sola con testo prima, e piu' righe nello stesso blocco). Il fix
+  resta da fare: va discusso separatamente perche' tocca la logica
+  centrale della regola, non un caso limite isolato.
 
 ## Una sola riga vuota ovunque: tra i paragrafi, e tra il corpo e la firma
 
@@ -171,3 +200,32 @@ locale con BeautifulSoup (vedi `tests/test_rules.py`) verifica la
 struttura dell'HTML prodotto, non come Gmail lo mostra davvero: resta
 comunque utile prima di ogni deploy, ma non sostituisce una verifica
 visiva occasionale su una bozza vera.
+
+## Registro dei casi limite verificati ma non ancora corretti (30.08.2026)
+
+Una sessione di revisione critica del 30.08.2026 ha costruito una bozza
+di verifica in Gmail (am.forte@almaval.ch) che esercita deliberatamente
+ogni regola e alcuni casi limite. Oltre al fix sul doppio trattino corto
+(sopra) e al bug sulla chiusura manuale multi-riga (sopra, ancora da
+correggere), la stessa revisione ha individuato altri punti da valutare
+in futuro, non ancora intervenuti:
+
+- Incoerenza fra corpo testuale e HTML nel calcolo della soglia
+  "ultimo quarto" di `strip_manual_closing`: su `body` la soglia si
+  calcola sul testo puro, su `html_body` sull'intera stringa HTML tag
+  inclusi, quindi un messaggio con poco testo ma molto markup puo'
+  vedere la stessa chiusura tagliata in un formato e conservata
+  nell'altro.
+- Nessuna normalizzazione delle righe vuote multiple nel `body` testuale
+  semplice: la regola "una sola riga vuota" oggi vale solo per
+  `html_body` (via `normalize_paragraph_spacing`, che lavora su tag di
+  blocco); tre righe vuote scritte a mano nel testo semplice restano
+  tali.
+- `ends_with_block_tag` guarda solo l'ultimo nodo di primo livello, non
+  il suo interno: un `html_body` che finisce con un blocco contenente
+  gia' una riga vuota al proprio interno (es. `<p>Testo.<br><br></p>`)
+  viene comunque considerato "gia' spaziato a sufficienza".
+
+Questi punti restano registrati qui come promemoria per una prossima
+sessione di lavoro sulle regole, non sono ancora stati decisi ne'
+implementati.
