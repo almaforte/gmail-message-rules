@@ -78,6 +78,57 @@ def test_strip_manual_closing_keeps_when_not_near_end():
     assert "Cordialement" in new_body
 
 
+def test_strip_manual_closing_html_removes_multiline_closing_in_same_block():
+    # Bug corretto il 30.08.2026: prima una chiusura manuale su piu' righe
+    # nello stesso blocco ("<p>Cordialement,<br>Alberto</p>") non veniva
+    # riconosciuta perche' non era l'UNICO contenuto del blocco. Ora la
+    # regola riconosce la chiusura come prima riga del blocco, a
+    # prescindere da cosa segue nello stesso tag.
+    html_body = (
+        "<p>Bonjour.</p>"
+        "<p>Voici un message assez long pour remplir largement le dernier "
+        "quart avec du texte supplementaire pour etre sur que ca marche "
+        "correctement dans ce test.</p>"
+        "<p>Cordialement,<br>Alberto</p>"
+    )
+    _, new_html = strip_manual_closing("", html_body)
+    assert "Cordialement" not in new_html
+    assert "Alberto" not in new_html
+    assert "Bonjour" in new_html
+
+
+def test_strip_manual_closing_html_removes_single_line_closing_block():
+    html_body = (
+        "<p>Bonjour.</p>"
+        "<p>Voici un message assez long pour remplir largement le dernier "
+        "quart avec du texte supplementaire pour etre sur que ca marche "
+        "correctement dans ce test.</p>"
+        "<p>Cordialement,</p>"
+    )
+    _, new_html = strip_manual_closing("", html_body)
+    assert "Cordialement" not in new_html
+    assert "Bonjour" in new_html
+
+
+def test_strip_manual_closing_html_keeps_closing_word_preceded_by_other_text():
+    # Una chiusura preceduta da altro testo nella STESSA riga (per esempio
+    # un'etichetta o una frase) non e' una vera formula di chiusura: non
+    # deve essere riconosciuta ne' tolta.
+    html_body = "<p>Merci pour votre patience, Cordialement,</p>"
+    _, new_html = strip_manual_closing("", html_body)
+    assert "Cordialement" in new_html
+
+
+def test_strip_manual_closing_html_keeps_short_document_without_prefix():
+    # Un documento composto solo dalla formula di chiusura, senza alcun
+    # testo prima, non ha corpo da cui essere "nell'ultimo quarto": resta
+    # intatto, coerentemente con lo stesso comportamento gia' in uso per
+    # il testo semplice.
+    html_body = "<p>Cordialement,</p>"
+    _, new_html = strip_manual_closing("", html_body)
+    assert "Cordialement" in new_html
+
+
 def test_build_message_removes_duplicate_signature():
     sig_text = "Cordialement,\n\nDr Test\ntest@example.com"
     sig_html = "Cordialement,<br><br>Dr Test<br>test@example.com"
@@ -88,12 +139,15 @@ def test_build_message_removes_duplicate_signature():
         "contexte supplementaire pour allonger le message.\n\n"
         "Cordialement,\nAlberto"
     )
+    # Chiusura manuale su piu' righe nello stesso blocco, il caso reale
+    # (una firma scritta a mano non e' quasi mai un <p> con solo la
+    # formula: contiene anche il nome che segue).
     long_body_html = (
         "<p>Bonjour,</p>"
         "<p>Voici un message de test suffisamment long pour que la formule de "
         "cloture se trouve bien dans le dernier quart du texte, avec du "
         "contexte supplementaire pour allonger le message.</p>"
-        "<p>Cordialement,</p>"
+        "<p>Cordialement,<br>Alberto</p>"
     )
     result = build_message(
         subject="Oggetto",
