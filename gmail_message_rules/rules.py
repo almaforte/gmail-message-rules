@@ -42,16 +42,22 @@ def _require_html_body(html_body: str) -> None:
 # ---------------------------------------------------------------------------
 
 _LONG_DASH_CHARS = "—–―"  # em dash, en dash, trattino orizzontale
-_LONG_DASH_PATTERN = re.compile(f"[{_LONG_DASH_CHARS}]")
+# Un em dash, un en dash, un trattino orizzontale, oppure due o piu' trattini
+# corti ASCII consecutivi (surrogato manuale dell'em dash: "--", "---", ...):
+# in tutti questi casi il risultato voluto e' un unico trattino corto "-".
+_LONG_DASH_PATTERN = re.compile(f"[{_LONG_DASH_CHARS}]+|-{{2,}}")
 
 
 def strip_long_dashes(text: str) -> str:
     """
-    Sostituisce ogni trattino lungo con un trattino corto "-". Non tocca
-    nient'altro: non normalizza spazi, non tocca altri segni di
+    Sostituisce ogni trattino lungo, o sequenza di due o piu' trattini
+    corti ASCII scritti di seguito ("--", "---", ...), con un unico
+    trattino corto "-". Un trattino corto isolato non viene mai toccato.
+    Non tocca nient'altro: non normalizza spazi, non tocca altri segni di
     punteggiatura, non tocca lettere accentate. Si applica a oggetto,
-    corpo testuale e html_body, perche' un trattino lungo puo' comparire
-    ovunque in un testo scritto di getto.
+    corpo testuale e html_body, perche' un trattino lungo (o il suo
+    surrogato "--" digitato a mano) puo' comparire ovunque in un testo
+    scritto di getto.
     """
     if not text:
         return text
