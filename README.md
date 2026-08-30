@@ -17,11 +17,16 @@ regola: quali bug ha risolto, quali limiti ha, come e' stata verificata.
 2. **Niente trattini lunghi, mai.** Em dash (—), en dash (–) e trattino
    orizzontale (―) vengono sostituiti in automatico con un trattino
    corto "-", in oggetto, corpo e `html_body`.
-3. **Niente firma o chiusura scritta a mano se ne viene passata una
+3. **Grassetto riservato ai titoli o a poche parole determinanti, mai
+   alla prosa.** Un `<strong>`/`<b>` di piu' di qualche parola nel corpo
+   del messaggio viene despezzato (il testo resta, il grassetto no); i
+   titoli (`<h1>`-`<h6>`) non sono mai toccati, quale che sia la loro
+   lunghezza.
+4. **Niente firma o chiusura scritta a mano se ne viene passata una
    ufficiale.** Una chiusura tipo "Cordialement, Alberto" scritta a mano
    verso la fine del messaggio viene individuata e tolta prima di
    appendere la firma vera, per evitare un doppione.
-4. **Una sola riga vuota ovunque**, tra i paragrafi del corpo e tra il
+5. **Una sola riga vuota ovunque**, tra i paragrafi del corpo e tra il
    corpo e la firma: nessun `<br>` ridondante subito prima o dopo un tag
    di blocco che Gmail spazia gia' da solo.
 
@@ -53,6 +58,7 @@ try:
         html_body="<p>Corpo in HTML...</p>",
         signature_text="Cordialement,\n\nNome Cognome",   # opzionale
         signature_html="Cordialement,<br><br>Nome Cognome", # opzionale
+        max_bold_words=6,  # opzionale, soglia della regola sul grassetto
     )
 except HtmlBodyRequiredError as exc:
     ...  # html_body mancante
@@ -63,8 +69,9 @@ except HtmlBodyRequiredError as exc:
 
 Ogni regola e' anche disponibile singolarmente, per chi vuole applicarle
 una alla volta invece di passare da `build_message`:
-`strip_long_dashes`, `strip_manual_closing`, `ends_with_block_tag`,
-`normalize_paragraph_spacing`, `wrap_html`, `apply_style`.
+`strip_long_dashes`, `limit_bold`, `strip_manual_closing`,
+`ends_with_block_tag`, `normalize_paragraph_spacing`, `wrap_html`,
+`apply_style`.
 
 ## Nuovo connettore MCP da zero
 
@@ -88,7 +95,7 @@ un nuovo repository:
    `reply_email` cosi' come sono: sono il punto in cui le regole di
    questo pacchetto vengono applicate.
 
-Non copiare o riscrivere la logica di `strip_long_dashes`,
+Non copiare o riscrivere la logica di `strip_long_dashes`, `limit_bold`,
 `strip_manual_closing`, `normalize_paragraph_spacing` o simili in un
 nuovo repository: se manca qualcosa, va aggiunto qui, cosi' vale subito
 per tutti i progetti collegati.
