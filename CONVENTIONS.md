@@ -145,17 +145,29 @@ Limiti noti di questa euristica, da tenere a mente se va estesa:
   possibile costruire un messaggio che la elude. Non e' pensata come
   misura di sicurezza, solo come rete di protezione contro l'errore piu'
   comune osservato in pratica.
-- **Bug noto, non ancora corretto al 30.08.2026:** il pattern HTML
-  (`_closing_pattern_html`) riconosce una chiusura solo se e' l'unico
-  contenuto testuale di un `<p>`/`<div>` isolato. Una chiusura manuale
-  scritta su piu' righe nello stesso blocco (per esempio
-  `<p>Cordialement,<br>Alberto</p>`), o preceduta da altro testo nello
-  stesso paragrafo, non viene riconosciuta e quindi non viene rimossa:
-  il messaggio finale mostra un doppione. Una bozza di verifica costruita
-  il 30.08.2026 ha confermato il problema su entrambe le varianti (una
-  riga sola con testo prima, e piu' righe nello stesso blocco). Il fix
-  resta da fare: va discusso separatamente perche' tocca la logica
-  centrale della regola, non un caso limite isolato.
+
+**Aggiornamento del 30.08.2026 (stesso giorno, correzione del bug piu'
+urgente trovato in fase di revisione):** la versione precedente
+(`_closing_pattern_html`) riconosceva una chiusura solo se era l'unico
+contenuto testuale di un `<p>`/`<div>` isolato. Una firma manuale
+scritta a mano non e' quasi mai cosi': contiene di solito anche il nome
+e altre righe nello stesso blocco (per esempio
+`<p>Cordialement,<br>Alberto</p>`), quindi in pratica il pattern non
+riconosceva mai la chiusura e il messaggio finale mostrava un doppione
+tra la chiusura scritta a mano e la firma ufficiale appesa dopo. Una
+bozza di verifica costruita apposta in Gmail (am.forte@almaval.ch) ha
+confermato il problema prima del fix, mostrando "Cordialement" ripetuto
+piu' volte in coda al messaggio.
+
+La correzione (`_strip_manual_closing_html`) riconosce la chiusura
+quando e' la PRIMA RIGA di testo di un tag di blocco di primo livello,
+non piu' quando e' l'unico contenuto del blocco: una firma su piu' righe
+nello stesso tag viene ora riconosciuta e rimossa per intero, insieme a
+tutto cio' che la segue. Resta in vigore la stessa soglia dell'ultimo
+quarto del documento gia' usata per il testo semplice, per non tagliare
+per errore una chiusura citata a meta' messaggio per altri motivi; una
+chiusura preceduta da altro testo nella stessa riga (un'etichetta, una
+frase) non viene riconosciuta, correttamente.
 
 ## Una sola riga vuota ovunque: tra i paragrafi, e tra il corpo e la firma
 
@@ -206,9 +218,9 @@ visiva occasionale su una bozza vera.
 Una sessione di revisione critica del 30.08.2026 ha costruito una bozza
 di verifica in Gmail (am.forte@almaval.ch) che esercita deliberatamente
 ogni regola e alcuni casi limite. Oltre al fix sul doppio trattino corto
-(sopra) e al bug sulla chiusura manuale multi-riga (sopra, ancora da
-correggere), la stessa revisione ha individuato altri punti da valutare
-in futuro, non ancora intervenuti:
+e al fix sulla chiusura manuale multi-riga (entrambi sopra, gia'
+corretti), la stessa revisione ha individuato altri punti da valutare in
+futuro, non ancora intervenuti:
 
 - Incoerenza fra corpo testuale e HTML nel calcolo della soglia
   "ultimo quarto" di `strip_manual_closing`: su `body` la soglia si
