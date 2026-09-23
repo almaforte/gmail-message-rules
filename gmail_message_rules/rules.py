@@ -188,24 +188,93 @@ def strip_manual_closing(
 # Grassetto riservato ai titoli o a poche parole determinanti, mai alla prosa
 # ---------------------------------------------------------------------------
 
-# Oltre questo numero di parole, un <strong>/<b> smette di essere "una data,
-# un nome proprio, una parola chiave" e diventa un pezzo di prosa intero
-# messo in grassetto: la regola di Alberto (30.08.2026, memoria di progetto)
-# lo vieta nel corpo corrente di un messaggio. Il limite e' volutamente
-# largo (una data lunga o un intitule breve ci stanno comunque dentro) per
-# non toccare mai un uso legittimo (una data, un nome proprio determinante).
+# Oltre questo numero di parole, un <strong>/<b> SPARSO NELLA PROSA smette di
+# essere "una data, un nome proprio, una parola chiave" e diventa un pezzo di
+# prosa intero messo in grassetto: la regola di Alberto (30.08.2026, memoria
+# di progetto) lo vieta nel corpo corrente di un messaggio. Il limite e'
+# volutamente largo (una data lunga o un intitule breve ci stanno comunque
+# dentro) per non toccare mai un uso legittimo.
 MAX_BOLD_WORDS = 6
 
+# Tetto applicato invece agli INTERTITOLI, cioe' ai <strong>/<b> che
+# costituiscono da soli tutto il contenuto del loro blocco. Un titolo di
+# blocco puo' essere piu' lungo di sei parole senza smettere di essere un
+# titolo, ma oltre questo tetto non e' piu' un titolo: e' un paragrafo
+# messo in evidenza, e il grassetto se ne va come per la prosa.
+MAX_HEADING_WORDS = 20
 
-def limit_bold(fragment: str, max_words: int = MAX_BOLD_WORDS) -> str:
+# Blocchi il cui contenuto, se e' interamente un <strong>/<b>, va letto come
+# un intertitolo e non come prosa in grassetto.
+_HEADING_PARENT_TAGS = {"p", "div", "li", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"}
+
+# Punteggiatura che chiude una frase. Un intertitolo non la porta mai; una
+# frase di prosa si'. I due punti NON sono in questa lista: un intertitolo
+# puo' legittimamente finire con ":".
+_SENTENCE_END = ".!?…"
+
+
+def _is_block_heading(tag, max_heading_words: int) -> bool:
     """
-    Rimuove un <strong> o <b> che racchiude piu' di max_words parole: il
-    tag viene tolto, il testo resta al suo posto ma senza piu' grassetto.
-    Un <strong> corto (una data, un nome proprio, un intitule di poche
-    parole) non viene mai toccato. Non tocca mai un <strong>/<b> che si
-    trova dentro un titolo (<h1>-<h6>): un titolo puo' legittimamente
-    essere interamente in evidenza, la regola riguarda solo il grassetto
-    sparso nella prosa corrente del corpo.
+    True se questo <strong>/<b> e' un intertitolo, cioe' un titolo di
+    blocco, e non del grassetto sparso nella prosa.
+
+    Tre condizioni insieme, e servono tutte e tre:
+
+    1. Il tag costituisce da solo TUTTO il contenuto testuale del suo
+       blocco. "<p><strong>Titre</strong></p>" e' un titolo;
+       "<p>Le <strong>14 septembre</strong> a 9h.</p>" e' prosa con una
+       data in evidenza.
+    2. Il testo non finisce con una punteggiatura di frase. Un
+       intertitolo non porta punto finale, una frase di prosa si'. E' il
+       criterio che distingue "Ce qui reste vrai, et qui explique votre
+       question" da "Ceci est une phrase entiere mise en gras sans aucune
+       raison valable ici."
+    3. Il testo resta sotto max_heading_words parole. Oltre, per quanto
+       privo di punto, non e' piu' un titolo.
+    """
+    parent = tag.parent
+    if parent is None or getattr(parent, "name", None) not in _HEADING_PARENT_TAGS:
+        return False
+
+    text = tag.get_text().strip()
+    if not text:
+        return False
+
+    if parent.get_text().strip() != text:
+        return False
+
+    if text[-1] in _SENTENCE_END:
+        return False
+
+    return len(text.split()) <= max_heading_words
+
+
+def limit_bold(
+    fragment: str,
+    max_words: int = MAX_BOLD_WORDS,
+    max_heading_words: int = MAX_HEADING_WORDS,
+) -> str:
+    """
+    Rimuove un <strong> o <b> che racchiude piu' di max_words parole DI
+    PROSA: il tag viene tolto, il testo resta al suo posto ma senza piu'
+    grassetto. Un <strong> corto (una data, un nome proprio, un intitule
+    di poche parole) non viene mai toccato.
+
+    NON tocca mai:
+
+    - un <strong>/<b> dentro un titolo <h1>-<h6>: un titolo puo'
+      legittimamente essere interamente in evidenza;
+    - un INTERTITOLO, cioe' un <strong>/<b> che costituisce da solo tutto
+      il contenuto del suo blocco, non finisce con un punto e resta sotto
+      max_heading_words parole (vedi _is_block_heading).
+
+    IL BUG CHE QUESTA SECONDA ECCEZIONE CORREGGE, 23.09.2026. Prima, un
+    intertitolo di sette parole perdeva il grassetto mentre uno di tre lo
+    teneva, nello stesso messaggio. Il lettore vedeva allora una gerarchia
+    inesistente e cercava la differenza di livello che quel grassetto
+    mancante sembrava segnalare. Il difetto non si vedeva scrivendo, solo
+    leggendo il messaggio ricevuto, e per settimane e' stato attribuito a
+    chi scriveva invece che a questa regola.
 
     Si applica dopo normalize_paragraph_spacing e prima di apply_style,
     per non dover rianalizzare uno stile gia' posato.
@@ -216,6 +285,8 @@ def limit_bold(fragment: str, max_words: int = MAX_BOLD_WORDS) -> str:
     heading_tags = {"h1", "h2", "h3", "h4", "h5", "h6"}
     for tag in soup.find_all(["strong", "b"]):
         if tag.find_parent(heading_tags):
+            continue
+        if _is_block_heading(tag, max_heading_words):
             continue
         word_count = len(tag.get_text().split())
         if word_count > max_words:
@@ -381,6 +452,7 @@ def build_message(
     closing_phrases: Optional[list] = None,
     style: Optional[dict] = None,
     max_bold_words: int = MAX_BOLD_WORDS,
+    max_heading_words: int = MAX_HEADING_WORDS,
 ) -> dict:
     """
     Applica tutte le regole in ordine e restituisce un dict pronto per
@@ -405,7 +477,11 @@ def build_message(
     body = strip_long_dashes(body)
     html_body = strip_long_dashes(html_body)
 
-    html_body = limit_bold(html_body, max_words=max_bold_words)
+    html_body = limit_bold(
+        html_body,
+        max_words=max_bold_words,
+        max_heading_words=max_heading_words,
+    )
 
     if signature_text or signature_html:
         body, html_body = strip_manual_closing(body, html_body, closing_phrases=closing_phrases)
