@@ -395,11 +395,36 @@ def _style_attr(style: dict) -> str:
     )
 
 
+def _style_attr_without_color(style: dict) -> str:
+    return (
+        f"font-family:{style['font_family']};"
+        f"font-size:{style['font_size']};"
+    )
+
+
 def _link_attr(style: dict) -> str:
     return (
         f"font-family:{style['font_family']};"
         f"font-size:{style['font_size']};"
     )
+
+
+def _has_declared_color_above(tag) -> bool:
+    """
+    True se un antenato di questo tag dichiara gia' un colore, con
+    <font color="..."> oppure con uno style che contiene "color:".
+
+    Serve a non schiacciare una scelta di colore fatta apposta in un
+    messaggio o in una firma. Vedi apply_style per il caso reale.
+    """
+    for ancestor in tag.parents:
+        if getattr(ancestor, "name", None) is None:
+            continue
+        if ancestor.name == "font" and ancestor.get("color"):
+            return True
+        if "color:" in (ancestor.get("style") or ""):
+            return True
+    return False
 
 
 def apply_style(fragment: str, style: Optional[dict] = None) -> str:
@@ -411,15 +436,37 @@ def apply_style(fragment: str, style: Optional[dict] = None) -> str:
     necessaria perche' Gmail trasmette il carattere di un div contenitore
     ai paragrafi ma lo perde sugli elenchi puntati e lo ignora nelle
     celle di tabella.
+
+    UN TAG SOTTO UN COLORE GIA' DICHIARATO riceve carattere e dimensione
+    ma NON il colore. Il caso reale, 23.09.2026: il disclaimer in calce
+    alla firma di gestion@almaval.ch e' scritto in grigio chiaro con
+    <font color="#999999">, e usciva invece dello stesso grigio del
+    corpo. Il motivo e' che il colore veniva imposto anche al <i>
+    annidato dentro quel <font>, e uno stile in linea sul figlio batte
+    l'attributo color del padre. Chi sceglie un grigio piu' chiaro per
+    una nota a pie' di firma se lo tiene.
+
+    L'insieme dei tag da risparmiare si calcola su TUTTO il frammento
+    prima di toccare qualunque cosa. Senza questa precauzione il primo
+    tag, ricevendo il colore, renderebbe protetti tutti i suoi
+    discendenti, e l'applicazione tag per tag smetterebbe di funzionare
+    proprio dove serve, cioe' negli elenchi e nelle celle.
     """
     if not fragment:
         return fragment
     style = style or DEFAULT_STYLE
     soup = BeautifulSoup(fragment, "html.parser")
+
+    styled_tags = soup.find_all(STYLED_TAGS)
+    protected = {id(tag) for tag in styled_tags if _has_declared_color_above(tag)}
+
     attr = _style_attr(style)
-    for tag in soup.find_all(STYLED_TAGS):
+    attr_without_color = _style_attr_without_color(style)
+    for tag in styled_tags:
         existing = tag.get("style", "")
-        tag["style"] = attr + existing
+        chosen = attr_without_color if id(tag) in protected else attr
+        tag["style"] = chosen + existing
+
     link_attr = _link_attr(style)
     for tag in soup.find_all("a"):
         existing = tag.get("style", "")
