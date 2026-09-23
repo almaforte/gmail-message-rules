@@ -7,9 +7,11 @@ guardando una bozza vera).
 """
 
 import pytest
+from bs4 import BeautifulSoup
 
 from gmail_message_rules import build_message, HtmlBodyRequiredError
 from gmail_message_rules.rules import (
+    apply_style,
     strip_long_dashes,
     strip_manual_closing,
     limit_bold,
@@ -311,3 +313,81 @@ def test_build_message_applies_limit_bold():
     result = build_message(subject="Oggetto", body="corpo", html_body=html_body)
     assert "Une phrase entiere en gras" in result["html_body"]
     assert "date importante</strong>" in result["html_body"]
+
+
+# --- apply_style: un colore voluto non viene piu' schiacciato (23.09.2026) ---
+
+
+def test_apply_style_does_not_override_color_under_font_attribute():
+    # Il caso reale: il disclaimer in calce alla firma di gestion@almaval.ch
+    # e' scritto in grigio chiaro con <font color="#999999">, e usciva dello
+    # stesso grigio del corpo perche' il colore veniva imposto anche al <i>
+    # annidato, dove uno stile in linea sul figlio batte l'attributo color
+    # del padre.
+    frag = (
+        '<p><font color="#999999" face="verdana, sans-serif">'
+        "<i>Le contenu de ce courriel est confidentiel.</i>"
+        "</font></p>"
+    )
+    result = apply_style(frag)
+    soup = BeautifulSoup(result, "html.parser")
+    italic = soup.find("i")
+    assert "color:" not in italic["style"]
+    assert "font-family:" in italic["style"]
+    assert "font-size:" in italic["style"]
+    # Il paragrafo che sta SOPRA il font, lui, riceve il colore del corpo.
+    assert "color:#666666" in soup.find("p")["style"]
+    # L'attributo color del <font> sopravvive: e' lui che deve vincere.
+    assert 'color="#999999"' in result
+
+
+def test_apply_style_does_not_override_color_under_inline_style():
+    frag = '<div style="color:#999999"><span>Note en gris clair</span></div>'
+    result = apply_style(frag)
+    soup = BeautifulSoup(result, "html.parser")
+    assert "color:" not in soup.find("span")["style"]
+
+
+def test_apply_style_still_colors_lists_and_table_cells():
+    # La protezione si calcola su TUTTO il frammento prima di toccare
+    # qualunque cosa. Senza quella precauzione il primo tag, ricevendo il
+    # colore, renderebbe protetti tutti i suoi discendenti, e
+    # l'applicazione tag per tag smetterebbe di funzionare proprio dove
+    # serve: negli elenchi e nelle celle.
+    frag = (
+        "<ul><li>Premier point</li><li>Second point</li></ul>"
+        "<table><tr><td>Cellule</td><th>Entete</th></tr></table>"
+        "<p>Un paragraphe.</p>"
+    )
+    result = apply_style(frag)
+    soup = BeautifulSoup(result, "html.parser")
+    for name in ("li", "td", "th", "p", "ul", "table"):
+        for tag in soup.find_all(name):
+            assert "color:#666666" in tag["style"], name
+
+
+def test_apply_style_keeps_links_without_color():
+    frag = '<p>Voir <a href="https://example.com">le document</a>.</p>'
+    result = apply_style(frag)
+    soup = BeautifulSoup(result, "html.parser")
+    assert "color:" not in soup.find("a")["style"]
+
+
+def test_build_message_keeps_light_grey_disclaimer_in_signature():
+    signature_html = (
+        "<p>Cordialement,</p>"
+        '<p><font color="#999999" face="verdana, sans-serif">'
+        "<i>Le contenu de ce courriel est confidentiel.</i>"
+        "</font></p>"
+    )
+    result = build_message(
+        subject="Oggetto",
+        body="Corpo del messaggio.",
+        html_body="<p>Corpo del messaggio.</p>",
+        signature_text="Cordialement,",
+        signature_html=signature_html,
+    )
+    soup = BeautifulSoup(result["html_body"], "html.parser")
+    italic = soup.find("i")
+    assert "color:" not in italic["style"]
+    assert 'color="#999999"' in result["html_body"]
