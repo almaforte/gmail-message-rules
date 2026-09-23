@@ -193,7 +193,7 @@ def test_normalize_paragraph_spacing_keeps_br_in_plain_text():
     assert "<br" in normalized
 
 
-# --- Nuovi test per limit_bold (regola del 30.08.2026) ---
+# --- limit_bold: grassetto nella prosa (regola del 30.08.2026) ---
 
 
 def test_limit_bold_keeps_short_bold():
@@ -213,6 +213,17 @@ def test_limit_bold_strips_long_bold_sentence():
     assert "Ceci est une phrase entiere" in result
 
 
+def test_limit_bold_strips_long_bold_inside_prose():
+    # Grassetto lungo ma in mezzo alla prosa: non e' un intertitolo,
+    # perche' non costituisce da solo tutto il contenuto del blocco.
+    frag = (
+        "<p>Voici <strong>une mise en evidence beaucoup trop longue pour "
+        "etre legitime</strong> ici.</p>"
+    )
+    result = limit_bold(frag)
+    assert "<strong>" not in result
+
+
 def test_limit_bold_never_touches_headings():
     frag = "<h2><strong>Ceci est un titre de chapitre assez long avec plusieurs mots</strong></h2>"
     result = limit_bold(frag)
@@ -227,7 +238,68 @@ def test_limit_bold_empty_and_none():
 def test_limit_bold_custom_max_words():
     frag = "<p><strong>Un deux trois quatre</strong></p>"
     assert "<strong>" in limit_bold(frag, max_words=6)
-    assert "<strong>" not in limit_bold(frag, max_words=2)
+    # Sotto il tetto degli intertitoli il grassetto resta comunque: e' un
+    # titolo di blocco, non prosa. Per toglierlo va abbassato anche
+    # max_heading_words.
+    assert "<strong>" not in limit_bold(frag, max_words=2, max_heading_words=2)
+
+
+# --- limit_bold: gli INTERTITOLI (bug corretto il 23.09.2026) ---
+
+
+def test_limit_bold_keeps_long_block_heading():
+    # Il caso reale che ha fatto scoprire il bug: un intertitolo di nove
+    # parole perdeva il grassetto mentre uno di tre lo teneva, nello
+    # stesso messaggio, e il lettore ci vedeva una gerarchia inesistente.
+    frag = "<p><strong>Ce qui reste vrai, et qui explique votre question</strong></p>"
+    assert "<strong>" in limit_bold(frag)
+
+
+def test_limit_bold_keeps_numbered_block_heading():
+    frag = "<p><strong>1. Ou sont les cahiers des charges</strong></p>"
+    assert "<strong>" in limit_bold(frag)
+
+
+def test_limit_bold_keeps_block_heading_ending_with_colon():
+    # I due punti chiudono legittimamente un intertitolo, il punto no.
+    frag = "<p><strong>Ce que ce message controle :</strong></p>"
+    assert "<strong>" in limit_bold(frag)
+
+
+def test_limit_bold_keeps_short_block_heading():
+    frag = "<p><strong>Un tutoriel ensemble</strong></p>"
+    assert "<strong>" in limit_bold(frag)
+
+
+def test_limit_bold_keeps_block_heading_in_table_cell_and_list_item():
+    assert "<strong>" in limit_bold("<td><strong>Nom et prenom du collaborateur</strong></td>")
+    assert "<strong>" in limit_bold("<li><strong>Premier point de la liste a retenir</strong></li>")
+
+
+def test_limit_bold_strips_pseudo_heading_too_long():
+    # Senza punto finale, ma oltre il tetto: non e' piu' un titolo, e' un
+    # paragrafo messo in evidenza.
+    frag = "<p><strong>" + " ".join(["mot"] * 25) + "</strong></p>"
+    assert "<strong>" not in limit_bold(frag)
+
+
+def test_limit_bold_strips_block_sentence_ending_with_period():
+    # Stesso blocco, stessa struttura, ma con il punto finale: e' prosa.
+    frag = "<p><strong>Ceci est une phrase de prose mise en gras entierement.</strong></p>"
+    assert "<strong>" not in limit_bold(frag)
+
+
+def test_build_message_keeps_block_headings_in_bold():
+    html_body = (
+        "<p>Bonjour,</p>"
+        "<p><strong>Ce qui reste vrai, et qui explique votre question</strong></p>"
+        "<p>Le texte du paragraphe.</p>"
+        "<p><strong>Un tutoriel ensemble</strong></p>"
+        "<p>Encore du texte.</p>"
+    )
+    result = build_message(subject="Oggetto", body="corpo", html_body=html_body)
+    # I due intertitoli restano in grassetto: nessuna gerarchia inventata.
+    assert result["html_body"].count("<strong") == 2
 
 
 def test_build_message_applies_limit_bold():
